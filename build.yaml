@@ -9,7 +9,7 @@ description: >
   already watched, and marks things played here when they're watched elsewhere.
 category: "General"
 owner: "tethrtv"
-imageUrl: "https://raw.githubusercontent.com/tethrtv/jellyfin-plugin/main/images/banner.png"
+imageUrl: "https://raw.githubusercontent.com/tethrtv/jellyfin-plugin/master/images/banner.png"
 artifacts:
 - "Jellyfin.Plugin.Tethr.dll"
 changelog: >
