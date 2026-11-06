@@ -48,7 +48,13 @@ public static class Links
     {
         lock (Gate)
         {
-            Config.ServerUrl = serverUrl.TrimEnd('/');
+            serverUrl = serverUrl.TrimEnd('/');
+            if (serverUrl != Config.ServerUrl.TrimEnd('/'))
+            {
+                Config.Links = [];
+            }
+
+            Config.ServerUrl = serverUrl;
             Config.MarkPlayed = markPlayed;
             Plugin.Instance?.SaveConfiguration();
         }

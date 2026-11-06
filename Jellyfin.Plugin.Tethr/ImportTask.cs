@@ -63,7 +63,7 @@ public class ImportTask(IUserManager users, ILibraryManager library, IUserDataMa
                 await tethr.AddHistory(link, batch, cancellationToken).ConfigureAwait(false);
             }
 
-            log.LogInformation("Sent {Count} of {Played} past plays for {User} to Tethr; the rest were already there", watches.Count, played.Count, user.Username);
+            log.LogInformation("Past plays for {User}: {Sent} sent to Tethr, {Skipped} skipped", user.Username, watches.Count, played.Count - watches.Count);
             link.Imported = DateTime.UtcNow;
             Links.Save(link);
             progress.Report(100.0 * (i + 1) / links.Length);

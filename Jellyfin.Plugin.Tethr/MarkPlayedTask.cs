@@ -87,7 +87,7 @@ public class MarkPlayedTask(IUserManager users, ILibraryManager library, IUserDa
                 }
             }
 
-            log.LogInformation("Marked {Count} plays from Tethr as played for {User}", marked, user.Username);
+            log.LogInformation("Plays from Tethr for {User}: {Count} marked as played", user.Username, marked);
             link.HistorySeenUpTo = newest ?? activity.History;
             Links.Save(link);
         }
