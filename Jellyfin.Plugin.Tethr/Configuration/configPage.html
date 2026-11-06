@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Tethr</title>
+</head>
+<body>
+  <div id="TethrConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
+    <div data-role="content">
+      <div class="content-primary">
+        <h2>Tethr</h2>
+        <p>Connect each person on this server to their Tethr profile. Everything they play here is logged to it, what they've already watched is sent once, and things they watch elsewhere are marked played here.</p>
+
+        <h3>People</h3>
+        <div id="TethrPeople"></div>
+
+        <h3>Settings</h3>
+        <form id="TethrSettings">
+          <div class="inputContainer">
+            <label class="inputLabel inputLabelUnfocused" for="TethrServerUrl">Tethr address</label>
+            <input id="TethrServerUrl" type="url" is="emby-input" />
+            <div class="fieldDescription">Leave as https://api.tethr.tv unless you run your own Tethr.</div>
+          </div>
+          <div class="checkboxContainer checkboxContainer-withDescription">
+            <label class="emby-checkbox-label">
+              <input id="TethrMarkPlayed" type="checkbox" is="emby-checkbox" />
+              <span>Mark things watched elsewhere as played here</span>
+            </label>
+          </div>
+          <div>
+            <button is="emby-button" type="submit" class="raised button-submit block emby-button">
+              <span>Save</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <script type="text/javascript">
+      (function () {
+        var page = document.querySelector('#TethrConfigPage');
+        var people = page.querySelector('#TethrPeople');
+        var timers = {};
+
+        function url(path) {
+          return ApiClient.getUrl('Tethr/' + path);
+        }
+
+        function call(method, path, body) {
+          return ApiClient.ajax({
+            type: method,
+            url: url(path),
+            data: body ? JSON.stringify(body) : undefined,
+            contentType: 'application/json',
+            dataType: method === 'GET' || path.indexOf('SignIn') !== -1 ? 'json' : undefined
+          });
+        }
+
+        function row(user, connection) {
+          var div = document.createElement('div');
+          div.className = 'listItem';
+          var name = document.createElement('div');
+          name.className = 'listItemBody';
+          var title = document.createElement('h3');
+          title.className = 'listItemBodyText';
+          title.textContent = user.Name;
+          var status = document.createElement('div');
+          status.className = 'listItemBodyText secondary';
+          status.textContent = connection ? 'Logging to ' + connection.ProfileName : 'Not connected';
+          name.appendChild(title);
+          name.appendChild(status);
+          var button = document.createElement('button');
+          button.setAttribute('is', 'emby-button');
+          button.className = 'raised emby-button';
+          button.textContent = connection ? 'Disconnect' : 'Connect';
+          button.addEventListener('click', function () {
+            if (connection) {
+              call('DELETE', 'Users/' + user.Id).then(load);
+            } else {
+              connect(user, status, button);
+            }
+          });
+          div.appendChild(name);
+          div.appendChild(button);
+          return div;
+        }
+
+        function connect(user, status, button) {
+          button.disabled = true;
+          call('POST', 'Users/' + user.Id + '/SignIn').then(function (code) {
+            status.textContent = 'Go to ' + code.VerificationUrl + ' and enter ' + code.UserCode + ', then choose the profile for ' + user.Name + '.';
+            clearInterval(timers[user.Id]);
+            timers[user.Id] = setInterval(function () {
+              call('GET', 'Users/' + user.Id + '/SignIn').then(function (result) {
+                if (result.Status === 'waiting') {
+                  return;
+                }
+                clearInterval(timers[user.Id]);
+                if (result.Status === 'connected') {
+                  load();
+                } else {
+                  status.textContent = result.Status === 'denied' ? 'The code was denied.' : 'The code ran out. Try again.';
+                  button.disabled = false;
+                }
+              });
+            }, Math.max(code.Interval || 5, 5) * 1000);
+          }, function () {
+            status.textContent = 'Couldn’t reach Tethr. Check the address in the settings below.';
+            button.disabled = false;
+          });
+        }
+
+        function load() {
+          Dashboard.showLoadingMsg();
+          Promise.all([ApiClient.getUsers(), call('GET', 'Settings')]).then(function (results) {
+            var users = results[0];
+            var settings = results[1];
+            page.querySelector('#TethrServerUrl').value = settings.ServerUrl;
+            page.querySelector('#TethrMarkPlayed').checked = settings.MarkPlayed;
+            people.innerHTML = '';
+            users.forEach(function (user) {
+              var connection = settings.Connections.filter(function (c) { return c.UserId.replace(/-/g, '') === user.Id.replace(/-/g, ''); })[0];
+              people.appendChild(row(user, connection));
+            });
+            Dashboard.hideLoadingMsg();
+          });
+        }
+
+        page.addEventListener('pageshow', load);
+        page.addEventListener('pagehide', function () {
+          Object.keys(timers).forEach(function (id) { clearInterval(timers[id]); });
+        });
+
+        page.querySelector('#TethrSettings').addEventListener('submit', function (e) {
+          e.preventDefault();
+          Dashboard.showLoadingMsg();
+          call('POST', 'Settings', {
+            ServerUrl: page.querySelector('#TethrServerUrl').value,
+            MarkPlayed: page.querySelector('#TethrMarkPlayed').checked
+          }).then(function () {
+            Dashboard.hideLoadingMsg();
+            Dashboard.alert('Saved');
+          });
+          return false;
+        });
+      })();
+    </script>
+  </div>
+</body>
+</html>

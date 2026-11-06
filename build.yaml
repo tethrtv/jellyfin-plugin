@@ -1,0 +1,16 @@
+name: "Tethr"
+guid: "1cb04614-f912-4e3f-bf92-03623a5a79e6"
+version: "0.1.0.0"
+targetAbi: "10.11.0.0"
+framework: "net9.0"
+overview: "Track what everyone on your server watches with Tethr"
+description: >
+  Logs every play on this server to Tethr, brings in what each person has
+  already watched, and marks things played here when they're watched elsewhere.
+category: "General"
+owner: "tethrtv"
+imageUrl: "https://raw.githubusercontent.com/tethrtv/jellyfin-plugin/main/images/banner.png"
+artifacts:
+- "Jellyfin.Plugin.Tethr.dll"
+changelog: >
+  First release.
