@@ -19,7 +19,7 @@
           <div class="inputContainer">
             <label class="inputLabel inputLabelUnfocused" for="TethrServerUrl">Tethr address</label>
             <input id="TethrServerUrl" type="url" is="emby-input" />
-            <div class="fieldDescription">Leave as https://api.tethr.tv unless you run your own Tethr.</div>
+            <div class="fieldDescription">Leave as https://api.tethr.tv unless you run your own Tethr. Changing it disconnects everyone.</div>
           </div>
           <div class="checkboxContainer checkboxContainer-withDescription">
             <label class="emby-checkbox-label">
@@ -137,8 +137,8 @@
             ServerUrl: page.querySelector('#TethrServerUrl').value,
             MarkPlayed: page.querySelector('#TethrMarkPlayed').checked
           }).then(function () {
-            Dashboard.hideLoadingMsg();
             Dashboard.alert('Saved');
+            load();
           });
           return false;
         });

@@ -36,8 +36,18 @@ public class TethrController(TethrClient tethr, ITaskManager tasks) : Controller
     }
 
     [HttpPost("Settings")]
-    public NoContentResult SaveSettings([FromBody] Settings settings)
+    public async Task<NoContentResult> SaveSettings([FromBody] Settings settings, CancellationToken ct)
     {
+        var config = Plugin.Instance?.Configuration ?? new PluginConfiguration();
+        if (settings.ServerUrl.TrimEnd('/') != config.ServerUrl.TrimEnd('/'))
+        {
+            Pending.Clear();
+            foreach (var link in Links.All())
+            {
+                await SignOut(link, ct).ConfigureAwait(false);
+            }
+        }
+
         Links.Settings(settings.ServerUrl, settings.MarkPlayed);
         return NoContent();
     }
@@ -101,13 +111,7 @@ public class TethrController(TethrClient tethr, ITaskManager tasks) : Controller
         if (Links.For(userId) is { } link)
         {
             Links.Remove(userId);
-            try
-            {
-                await tethr.SignOut(link, ct).ConfigureAwait(false);
-            }
-            catch (System.Net.Http.HttpRequestException)
-            {
-            }
+            await SignOut(link, ct).ConfigureAwait(false);
         }
 
         return NoContent();
@@ -118,5 +122,18 @@ public class TethrController(TethrClient tethr, ITaskManager tasks) : Controller
     {
         tasks.QueueScheduledTask<ImportTask>();
         return NoContent();
+    }
+
+    private async Task SignOut(UserLink link, CancellationToken ct)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(5));
+        try
+        {
+            await tethr.SignOut(link, timeout.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is System.Net.Http.HttpRequestException or TaskCanceledException)
+        {
+        }
     }
 }
