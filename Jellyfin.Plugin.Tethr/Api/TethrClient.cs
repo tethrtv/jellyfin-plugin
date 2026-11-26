@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.Tethr.Configuration;
 using MediaBrowser.Common.Net;
+using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.Tethr.Api;
 
@@ -18,10 +19,14 @@ public class SignInEndedException(HttpStatusCode status) : Exception("tethr sign
     public HttpStatusCode Status { get; } = status;
 }
 
-public class TethrClient(IHttpClientFactory http)
+public class TethrClient(IHttpClientFactory http, ILogger<TethrClient> log)
 {
     // Every Tethr server has this app built in, self-hosted ones included.
     private const string ClientId = "tethr-jellyfin";
+
+    private const int MaxAttempts = 5;
+
+    private static readonly TimeSpan MaxWait = TimeSpan.FromMinutes(1);
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
@@ -64,7 +69,7 @@ public class TethrClient(IHttpClientFactory http)
 
     public async Task Scrobble(UserLink link, ScrobbleRequest scrobble, CancellationToken ct)
     {
-        using var res = await Authed(HttpMethod.Post, "/v1/scrobble", scrobble, link, ct).ConfigureAwait(false);
+        using var res = await Authed(HttpMethod.Post, "/v1/scrobble", scrobble, link, ct, retry: false).ConfigureAwait(false);
         if (res.StatusCode is not (HttpStatusCode.Conflict or HttpStatusCode.UnprocessableEntity or HttpStatusCode.NotFound))
         {
             res.EnsureSuccessStatusCode();
@@ -96,14 +101,27 @@ public class TethrClient(IHttpClientFactory http)
         using var res = await Send(HttpMethod.Post, "/oauth/revoke", new { token = link.AccessToken, client_id = ClientId }, null, ct).ConfigureAwait(false);
     }
 
-    private async Task<HttpResponseMessage> Authed(HttpMethod method, string path, object? body, UserLink link, CancellationToken ct)
+    private async Task<HttpResponseMessage> Authed(HttpMethod method, string path, object? body, UserLink link, CancellationToken ct, bool retry = true)
     {
-        if (link.ExpiresAt < DateTime.UtcNow.AddHours(1))
+        for (var attempt = 1; ; attempt++)
         {
-            await Refresh(link, ct).ConfigureAwait(false);
-        }
+            if (link.ExpiresAt < DateTime.UtcNow.AddHours(1))
+            {
+                await Refresh(link, ct).ConfigureAwait(false);
+            }
 
-        return await Send(method, path, body, link.AccessToken, ct).ConfigureAwait(false);
+            var res = await Send(method, path, body, link.AccessToken, ct).ConfigureAwait(false);
+            if (res.StatusCode is not HttpStatusCode.TooManyRequests || !retry || attempt == MaxAttempts)
+            {
+                return res;
+            }
+
+            var asked = res.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(1);
+            var wait = (asked < MaxWait ? asked : MaxWait) + TimeSpan.FromMilliseconds(Random.Shared.Next(1000));
+            res.Dispose();
+            log.LogInformation("Tethr asked to slow down on {Method} {Path}, trying again in {Seconds:0.#}s (attempt {Attempt} of {Max})", method, path, wait.TotalSeconds, attempt + 1, MaxAttempts);
+            await Task.Delay(wait, ct).ConfigureAwait(false);
+        }
     }
 
     private async Task Refresh(UserLink link, CancellationToken ct)
